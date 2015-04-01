@@ -6,10 +6,10 @@ It can train a TripletNet on any of the {Cifar10/100, STL10, SVHN, MNIST} datase
 
 ##Data
 You can get the needed data using the following repos:
-CIFAR10/100: https://github.com/soumith/cifar.torch.git
-STL10: https://github.com/eladhoffer/stl10.torch
-SVHN: https://github.com/torch/tutorials/blob/master/A_datasets/svhn.lua
-MNIST: https://github.com/andresy/mnist
+* CIFAR10/100: https://github.com/soumith/cifar.torch.git
+* STL10: https://github.com/eladhoffer/stl10.torch
+* SVHN: https://github.com/torch/tutorials/blob/master/A_datasets/svhn.lua
+* MNIST: https://github.com/andresy/mnist
 
 ##Dependencies
 Requires "eladtools" (https://github.com/eladhoffer/eladtools.git) for DataProvider class and optimizer.
