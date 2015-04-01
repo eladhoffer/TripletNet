@@ -14,6 +14,8 @@ You can get the needed data using the following repos:
 ##Dependencies
 Requires "eladtools" (https://github.com/eladhoffer/eladtools.git) for DataProvider class and optimizer.
 
+cudnn (https://github.com/soumith/cudnn.torch) is also used, but can be avoided by changing "cudnn"->"nn" in models.
+
 ##Models
 Available models are at the “Models” directory. The basic Model.lua was used in the paper, while NiN based models achieve slightly better
 results.
