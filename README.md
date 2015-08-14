@@ -2,7 +2,7 @@ Deep Metric Learning Using Triplet Network
 ==========================================
 This code replicates the results from the paper “Deep metric learning using Triplet network” (http://arxiv.org/abs/1412.6622).
 
-It can train a TripletNet on any of the {Cifar10/100, STL10, SVHN, MNIST} datasets. 
+It can train a TripletNet on any of the {Cifar10/100, STL10, SVHN, MNIST} datasets.
 
 ##Data
 You can get the needed data using the following repos:
@@ -12,9 +12,10 @@ You can get the needed data using the following repos:
 * MNIST: https://github.com/andresy/mnist
 
 ##Dependencies
-Requires "eladtools" (https://github.com/eladhoffer/eladtools.git) for DataProvider class and optimizer.
-
-cudnn (https://github.com/soumith/cudnn.torch) is also used, but can be avoided by changing "cudnn"->"nn" in models.
+* Torch (http://torch.ch)
+* "eladtools" (https://github.com/eladhoffer/eladtools) for optimizer.
+* "nngraph" (https://github.com/torch/nngraph) for TripletNet configuration.
+* "cudnn.torch" (https://github.com/soumith/cudnn.torch) for faster training. Can be avoided by changing "cudnn" to "nn" in models.
 
 ##Models
 Available models are at the “Models” directory. The basic Model.lua was used in the paper, while NiN based models achieve slightly better
