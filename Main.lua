@@ -1,11 +1,12 @@
 require 'DataContainer'
-require 'TripletNetBatch'
---require 'TripletNet'
+require 'TripletNet'
 require 'cutorch'
 require 'eladtools'
 require 'optim'
 require 'xlua'
 require 'trepl'
+require 'DistanceRatioCriterion'
+require 'cunn'
 ----------------------------------------------------------------------
 
 
@@ -63,21 +64,15 @@ end
 
 ----------------------------------------------------------------------
 -- Model + Loss:
+
 local EmbeddingNet = require(opt.network)
-local TripletNet = nn.TripletNetBatch(EmbeddingNet)
-local Net = nn.Sequential()
-Net:add(TripletNet)
-Net:add(nn.SoftMax())
-
-Net:cuda()
-
-local Loss = nn.MSECriterion():cuda()
+local TripletNet = nn.TripletNet(EmbeddingNet)
+local Loss = nn.DistanceRatioCriterion()
+TripletNet:cuda()
+Loss:cuda()
 
 
-
-
-
-local Weights, Gradients = EmbeddingNet:getParameters()
+local Weights, Gradients = TripletNet:getParameters()
 
 if paths.filep(opt.load) then
     local w = torch.load(opt.load)
@@ -110,7 +105,7 @@ local Log = optim.Logger(log_filename)
 print '==> Embedding Network'
 print(EmbeddingNet)
 print '==> Triplet Network'
-print(Net)
+print(TripletNet)
 print '==> Loss'
 print(Loss)
 
@@ -133,6 +128,9 @@ local TestDataContainer = DataContainer{
 
 
 local function ErrorCount(y)
+    if torch.type(y) == 'table' then
+      y = y[#y]
+    end
     return (y[{{},2}]:ge(y[{{},1}]):sum())
 end
 
@@ -143,11 +141,9 @@ local optimState = {
     learningRateDecay = opt.LRDecay
 }
 
-local LeftMatchLabel = torch.zeros(opt.batchSize,2):cuda()
-LeftMatchLabel[{{},1}]:add(1)
 
 local optimizer = Optimizer{
-    Model = Net,
+    Model = TripletNet,
     Loss = Loss,
     OptFunction = _G.optim[opt.optimization],
     OptState = optimState,
@@ -157,28 +153,31 @@ local optimizer = Optimizer{
 function Train(DataC)
     DataC:Reset()
     DataC:GenerateList()
-    Net:training()
+    TripletNet:training()
     local err = 0
     local num = 1
     local x = DataC:GetNextBatch()
+
     while x do
-        local y = optimizer:optimize(x, LeftMatchLabel)
+        local y = optimizer:optimize({x[1],x[2],x[3]}, 1)
+
         err = err + ErrorCount(y)
         xlua.progress(num*opt.batchSize, DataC:size())
         num = num + 1
         x = DataC:GetNextBatch()
+
     end
     return (err/DataC:size())
 end
 
 function Test(DataC)
     DataC:Reset()
-    Net:evaluate()
+    TripletNet:evaluate()
     local err = 0
     local x = DataC:GetNextBatch()
     local num = 1
     while x do
-        local y = Net:forward(x)
+        local y = TripletNet:forward({x[1],x[2],x[3]})
         err = err + ErrorCount(y)
         xlua.progress(num*opt.batchSize, DataC:size())
         num = num +1

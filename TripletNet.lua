@@ -1,103 +1,83 @@
 require 'nn'
-local TripletNet, parent = torch.class('nn.TripletNet', 'nn.Module')
-
-function split_tensor(input) 
-    local tbl = {}
-    for i=1,input:size(1) do
-        table.insert(tbl, input[i])
-    end
-    return tbl
-end
-
-function TripletNet:__init(net, num, dist)
-    self.BatchMode = true
-    self.nNets = num or 3
-    self.Dist = dist or nn.PairwiseDistance(2)
-    self.SubNet = nn.Sequential()
-    if net then
-        self.SubNet:add(net)
-    end
-    
-    self.output = torch.Tensor()
-    self:RebuildNet()
-end
-
-function TripletNet:RebuildNet()
-    self.Net = nn.ParallelTable()
-    self.Net:add(self.SubNet)
-    for i=2, self.nNets do
-        self.Net:add(self.SubNet:clone('weight','bias','gradWeight','gradBias'))
-    end
-end
+require 'nngraph'
+local TripletNet, parent = torch.class('nn.TripletNet', 'nn.gModule')
 
 
-function TripletNet:add(module)
-    self.SubNet:add(module)
-    self:RebuildNet()
-end
+local function CreateTripletNet(EmbeddingNet, inputs, distMetric, postProcess)
+  local embeddings = {}
+  local dists = {}
+  local nets = {EmbeddingNet}
+  local num = #inputs
+  for i=1,num do
+      if i < num then
+          nets[i+1] = nets[1]:clone('weight','bias','gradWeight','gradBias','running_mean','running_std')
+      end
+      embeddings[i] = nets[i](inputs[i])
+  end
+  local embedMain = embeddings[1]
 
-function TripletNet:updateOutput(input)
-    local x = split_tensor(input)
-    if self.BatchMode then
-        self.BatchSize = x[1]:size(1)
+  if postProcess then
+    embedMain = postProcess(embedMain)
+  end
+
+  for i=1,num-1 do
+    if postProcess then
+      dists[i] = nn.View(-1,1)(distMetric:clone()({embedMain, postProcess(embeddings[i+1])}))
     else
-        self.BatchSize = 1
+      dists[i] = nn.View(-1,1)(distMetric:clone()({embedMain,embeddings[i+1]}))
     end
-    self.output:resize(self.BatchSize, self.nNets - 1):typeAs(x[1])
-    self.sub_output = self.Net:updateOutput(x)
-    for i=1, self.nNets-1 do
-        self.output[{{},i}] = self.Dist:updateOutput({self.sub_output[1],self.sub_output[i+1]})
-    end
-    return self.output
+  end
+  return nets, dists, embeddings
 end
-function TripletNet:updateGradInput(input,gradOutput)
-    local x = split_tensor(input)
-    self.DistGradInput = {}--torch.zeros(self.BatchSize):typeAs(x[1]),13}
-    for i=1, self.nNets-1 do
-        local dyi = gradOutput[{{},i}]
-        if type(dyi) == 'number' then
-            dyi = torch.Tensor({dyi}):typeAs(gradOutput)
+
+function TripletNet:__init(EmbeddingNet, num, distMetric, collectFeat)
+--collectFeat is of for {{layerNum = number, postProcess = module}, {layerNum = number, postProcess = module}...}
+    self.num = num or 3
+    self.distMetric = distMetric or nn.PairwiseDistance(2)
+    self.EmbeddingNet = EmbeddingNet
+    self.nets = {}
+    local collectFeat = collectFeat or {{layerNum = #self.EmbeddingNet}}
+    local inputs = {}
+    local outputs = {}
+    local dists
+
+    for i=1,self.num do
+      inputs[i] = nn.Identity()()
+    end
+
+      local start_layer = 1
+      local currInputs = inputs
+      for f=1,#collectFeat do
+        local end_layer = collectFeat[f].layerNum
+        local net = nn.Sequential()
+        for l=start_layer,end_layer do
+          net:add(self.EmbeddingNet:get(l))
         end
-        local dEi = self.Dist:updateGradInput({self.sub_output[1],self.sub_output[i+1]},dyi)
-        if self.DistGradInput[1] == nil then
-            self.DistGradInput[1] = dEi[1]:clone()
-        else
-            self.DistGradInput[1]:add(dEi[1])
+
+        local nets, dists, embeddings = CreateTripletNet(net, currInputs, self.distMetric, collectFeat[f].postProcess)
+        currInputs = {}
+        for i=1,self.num do
+          if not self.nets[i] then self.nets[i] = {} end
+          table.insert(self.nets[i], nets[i])
+          table.insert(currInputs, embeddings[i])
         end
-        self.DistGradInput[i+1] = dEi[2]:clone()
+        table.insert(outputs, nn.JoinTable(2)(dists))
+        start_layer = end_layer+1
+      end
+
+    parent.__init(self, inputs, outputs)
+end
+
+function TripletNet:shareWeights()
+    for i=1,self.num-1 do
+          for j=1,#self.nets[i] do
+            self.nets[i+1][j]:share(self.nets[1][j],'weight','bias','gradWeight','gradBias','running_mean','running_std')
+          end
     end
-    self.gradInput = self.Net:updateGradInput(x, self.DistGradInput)
-    return self.gradInput
 end
 
-function TripletNet:accGradParameters(input, gradOutput, scale)
-    local x = split_tensor(input)
-    self.Net:accGradParameters(x, self.DistGradInput, scale)
-end
-
-
-function TripletNet:training()
-    self.Net:training()
-end
-
-function TripletNet:evaluate()
-    self.Net:evaluate()
-end
-
-function TripletNet:getParameters()
-    local w, g = self.SubNet:getParameters()
-    self:RebuildNet()
-    return w,g
-end
-function TripletNet:parameters()
-    return self.SubNet:parameters()
-end
 
 function TripletNet:type(t)
-    self.SubNet:type(t)
-    self.Dist:type(t)
-    self.output = self.output:type(t)
-    self:RebuildNet()
-
+    parent.type(self, t)
+    self:shareWeights()
 end
-

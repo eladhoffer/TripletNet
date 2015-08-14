@@ -144,7 +144,7 @@ function GenerateList(labels,num, size)
         c[1] = math.random(nClasses) --compared class
         local n1 = math.random(#Ordered[c[1]])
         local n_last = math.random(#Ordered[c[1]])
-        
+
         while n_last == n1 do
             n_last = math.random(#Ordered[c[1]])
         end
