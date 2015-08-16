@@ -27,7 +27,8 @@ function DistanceRatioCriterion:updateGradInput(input, target)
     if not self.Target:isSameSizeAs(input) then
         self:createTarget(input, target)
     end
-    self.gradInput = self.SoftMax:updateGradInput(input, self.MSE:updateGradInput(input,self.Target))
+
+    self.gradInput = self.SoftMax:updateGradInput(input, self.MSE:updateGradInput(self.SoftMax.output,self.Target))
     return self.gradInput
 end
 
@@ -36,4 +37,5 @@ function DistanceRatioCriterion:type(t)
     self.SoftMax:type(t)
     self.MSE:type(t)
     self.Target = self.Target:type(t)
+    return self
 end
